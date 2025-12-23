@@ -2,6 +2,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { RegisterRequest } from './dto/register.dto';
@@ -10,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { JwtPayload } from './interfaces/jwt.interface';
 import { LoginRequest } from './dto/login.dto';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { isDev } from 'src/utils/is-dev.util';
 
 @Injectable()
@@ -79,6 +80,33 @@ export class AuthService {
 
     return this.auth(res, user.id);
   }
+
+  async refresh(req: Request, res: Response) {
+    const refreshToken = req.cookies['refreshToken'];
+    if (!refreshToken) {
+      throw new UnauthorizedException('Недействительный refresh-token');
+    }
+
+    const payload: JwtPayload = await this.jwtService.verifyAsync(refreshToken);
+
+    if (payload) {
+      const user = await this.PrismaService.user.findUnique({
+        where: { id: payload.id },
+        select: { id: true },
+      });
+
+      if (!user) {
+        throw new NotFoundException('Пользователь не найден');
+      }
+      return this.auth(res, user.id);
+    }
+  }
+
+  async logout(res: Response) {
+    this.setCookie(res, 'refreshToken', new Date(0));
+    return true;
+  }
+
   private auth(res: Response, id: string) {
     const { accessToken, refreshToken } = this.generateTokens(id);
     this.setCookie(res, refreshToken, new Date(Date.now() + 60 * 60 * 24 * 7));
