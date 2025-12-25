@@ -13,11 +13,12 @@ import type { JwtPayload } from './interfaces/jwt.interface';
 import { LoginRequest } from './dto/login.dto';
 import type { Request, Response } from 'express';
 import { isDev } from 'src/utils/is-dev.util';
+import type { JwtSignOptions } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  private readonly JWT_ACCESS_TOKET_TTL: number;
-  private readonly JWT_REFRESH_TOKEN_TTL: number;
+  private readonly JWT_ACCESS_TOKET_TTL: JwtSignOptions['expiresIn'];
+  private readonly JWT_REFRESH_TOKEN_TTL: JwtSignOptions['expiresIn'];
 
   private readonly COOKIE_DOMAIN: string;
 
@@ -26,10 +27,10 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
   ) {
-    this.JWT_ACCESS_TOKET_TTL = configService.getOrThrow<number>(
+    this.JWT_ACCESS_TOKET_TTL = configService.getOrThrow(
       'JWT_ACCESS_TOKET_TTL',
     );
-    this.JWT_REFRESH_TOKEN_TTL = configService.getOrThrow<number>(
+    this.JWT_REFRESH_TOKEN_TTL = configService.getOrThrow(
       'JWT_REFRESH_TOKEN_TTL',
     );
     this.COOKIE_DOMAIN = configService.getOrThrow<string>('COOKIE_DOMAIN');
@@ -105,6 +106,18 @@ export class AuthService {
   async logout(res: Response) {
     this.setCookie(res, 'refreshToken', new Date(0));
     return true;
+  }
+
+  async validate(id: string) {
+    const user = await this.PrismaService.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Пользователь не найден');
+    }
+
+    return user;
   }
 
   private auth(res: Response, id: string) {
